@@ -1,27 +1,36 @@
-class ActivityNode:
+import networkx as nx
+import matplotlib.pyplot as plt
+import tabulate as tab
+
+
+class TaskNode:
     def __init__(self, time=0, adj_list=None) -> None:
+        """
+        Constructor from TaskNode
+        :param time: time it takes to complete a task
+        :param adj_list: list of nodes adjacent to the nodes
+        """
+        # adj_list as optional parameter
         if adj_list is None:
             adj_list = []
+        # Attributes from ActivityNode
         self.time = time
         self.adj_list = adj_list
-        self.predecessors = []
+        self.pred_list = []
         self.TPI = 0
         self.TPT = 0
         self.TUI = 0
         self.TUT = 0
         return
 
-    def add_adj(self, node: str):
-        self.adj_list.append(node)
-        return
 
-
-class Graph:
+class TasksGraph:
     def __init__(self, nodes=0) -> None:
         self.number_of_nodes = nodes
         self.node_list = {}
+        self.critical_path = []
         for n in range(nodes):
-            node = ActivityNode()
+            node = TaskNode()
             self.node_list[str(chr(65 + n))] = node
         return
 
@@ -31,41 +40,38 @@ class Graph:
                 return True
         return False
 
-    def add_node(self, name: str, time=0, adj_list=None):
+    def add_node(self, name: str, time=0, adj_list=None) -> None:
         if adj_list is None:
             adj_list = []
-        # Se revisa si el nodo a crear ya existe
-        new_node = ActivityNode(time=time, adj_list=adj_list)
+        new_node = TaskNode(time=time, adj_list=adj_list)
         if name in self.node_list:
             new_node = self.node_list[name]
         new_node.time = time
         new_node.adj_list = adj_list
         self.node_list[name] = new_node
-        # Se itera sobre su lista de adjacencia
         for n in adj_list:
-            node = ActivityNode()
+            node = TaskNode()
             if n in self.node_list:
                 node = self.node_list[n]
-                node.predecessors.append(name)
+                node.pred_list.append(name)
             else:
-                node.predecessors.append(name)
+                node.pred_list.append(name)
                 self.node_list[n] = node
         return
 
-    def print_node_list(self):
-        print("---Node List---")
+    def print_node_list(self) -> None:
+        print("------Node List------")
+        data = []
         for name in self.node_list:
             node = self.node_list[name]
-            print(name, end="")
-            print("(" + str(node.time) + ")", end="")
-            if node.adj_list:
-                print(":", node.adj_list, end="")
-            if node.predecessors:
-                print(":", node.predecessors, end="")
-            print()
+            line = [name, node.adj_list if node.adj_list else "", node.pred_list if node.pred_list else "", node.time]
+            data.append(line)
+        print(tab.tabulate(data, headers=["Task", "Next", "Predecessor", "Time"], tablefmt="psql"))
         return
 
-    def get_critical_path(self):
+    def critical_path_method(self) -> None:
+        # First part from CPM
+        # Go through the graph from start to calculate TPI and TPT using BFS
         queue = ["Start"]
         path = []
         while queue:
@@ -74,7 +80,7 @@ class Graph:
             node = self.node_list[node_name]
             if node_name != "Start":
                 times = []
-                for p in node.predecessors:
+                for p in node.pred_list:
                     predecessor = self.node_list[p]
                     times.append(predecessor.TPT)
                 node.TPI = max(times)
@@ -83,6 +89,8 @@ class Graph:
                 if n not in queue and node not in path:
                     queue.append(n)
 
+        # Second part from CPM
+        # Go through the graph from end to calculate TUI and TPI using BFS
         queue = ["End"]
         path = []
 
@@ -99,13 +107,15 @@ class Graph:
                     times.append(predecessor.TUI)
                 node.TUT = min(times)
             node.TUI = node.TUT - node.time
-            for n in node.predecessors:
+            for n in node.pred_list:
                 if n not in queue and node not in path:
                     queue.append(n)
 
+        # Third part from CPM
+        # Go through the graph using only the nodes that have slack 0
+        # Add to self.cpm all the nodes used in the slack 0 path
         queue = ["Start"]
         path = []
-        cpm = []
 
         while queue:
             node_name = queue.pop(0)
@@ -113,15 +123,25 @@ class Graph:
             node = self.node_list[node_name]
 
             if node.TPI == node.TUI:
-                cpm.append(node_name)
+                self.critical_path.append(node_name)
 
             for n in node.adj_list:
                 if n not in queue and node not in path:
                     queue.append(n)
+        return
 
-        return cpm
+    def print_cpm(self) -> None:
+        self.critical_path_method()
+        print("------Critical Path------")
+        for node in self.critical_path:
+            if node == self.critical_path[0]:
+                print(node, end=" ")
+            else:
+                print(" ->", node, end=" ")
+        print()
+        return
 
-    def print_times(self):
+    def print_times(self) -> None:
         for name in self.node_list:
             print(name)
             print("TPI:", self.node_list[name].TPI, end=" | ")
@@ -130,10 +150,23 @@ class Graph:
             print("TUT:", self.node_list[name].TUT, end=" ")
             print()
         print()
+        return
+
+    def print_graph(self) -> None:
+        graph = nx.DiGraph()
+        for node1 in self.node_list.keys():
+            for node2 in self.node_list.get(node1).adj_list:
+                graph.add_edge(node1, node2)
+
+        nx.draw(graph, with_labels=True, font_weight='bold', node_size=1000, width=2.5, node_color='darkcyan',
+                font_color='white')
+
+        plt.show()
+        return
 
 
 def main() -> None:
-    # graphA = Graph()
+    # graphA = TasksGraph()
     # graphA.add_node("Start", time=0, adj_list=["A", "B"])
     # graphA.add_node("A", time=3, adj_list=["C"])
     # graphA.add_node("B", time=4, adj_list=["D"])
@@ -142,9 +175,9 @@ def main() -> None:
     # graphA.add_node("E", time=5, adj_list=["F"])
     # graphA.add_node("F", time=1, adj_list=["End"])
     # graphA.print_node_list()
-    # print(graphA.get_critical_path())
+    # graphA.print_cpm()
 
-    graph = Graph()
+    graph = TasksGraph()
     graph.add_node("Start", adj_list=["A"])
     graph.add_node("A", time=4, adj_list=["B", "C", "D"])
     graph.add_node("B", time=2, adj_list=["E"])
@@ -152,7 +185,7 @@ def main() -> None:
     graph.add_node("D", time=1, adj_list=["End"])
     graph.add_node("E", time=5, adj_list=["End"])
     graph.print_node_list()
-    print(graph.get_critical_path())
+    graph.print_cpm()
 
     return
 
